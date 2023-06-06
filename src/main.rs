@@ -1,6 +1,8 @@
 use glium::Surface;
 
 const JUMP_COOLDOWN: std::time::Duration = std::time::Duration::from_millis(250);
+const ACCEL_GRAV: f32 = -0.009;
+const TERM_VEL: f32 = -0.01;
 
 #[derive(Copy, Clone)]
 struct Vert {
@@ -60,14 +62,15 @@ impl Bird {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // default window size
-    let mut _win_w = 1024;
-    let mut _win_h = 768;
+    // renderer variables
+    let mut next_frame_time = std::time::Instant::now();
+    let mut then = std::time::Instant::now();
+    let mut _win_size_px = (1024, 768);
 
     // initial setup
     let eve_lp = glium::glutin::event_loop::EventLoop::new();
     let win_b = glium::glutin::window::WindowBuilder::new()
-        .with_inner_size(glium::glutin::dpi::LogicalSize::new(_win_w, _win_h))
+        .with_inner_size(glium::glutin::dpi::LogicalSize::new(_win_size_px.0, _win_size_px.1))
         .with_title("flap");
     let cntxt_b = glium::glutin::ContextBuilder::new();
     let disp = glium::Display::new(win_b, cntxt_b, &eve_lp)?;
@@ -78,8 +81,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let shdr = glium::program::Program::from_source(&disp, &vert_shdr, &frag_shdr, None)?;
 
     // gameplay variables
-    let mut next_frame_time = std::time::Instant::now();
-    let mut then = std::time::Instant::now();
     let mut last_jump_time = None;
     let mut birdy = Bird::new();
 
@@ -100,7 +101,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	    glium::glutin::event::Event::WindowEvent {
 		event: glium::glutin::event::WindowEvent::Resized(win_size),
 		..
-	    } => glium::glutin::dpi::PhysicalSize{width: _win_w, height: _win_h} = win_size,
+	    } => glium::glutin::dpi::PhysicalSize{width: _win_size_px.0, height: _win_size_px.1} = win_size,
 	    glium::glutin::event::Event::WindowEvent {
 		event: glium::glutin::event::WindowEvent::KeyboardInput {
 		    input: glium::glutin::event::KeyboardInput {
@@ -116,13 +117,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		None => std::time::Duration::MAX,
 		Some(time) => now.duration_since(time)
 	    } > JUMP_COOLDOWN {
-		birdy.velocity.1 = 0.003;
+		last_jump_time = Some(now);
+		birdy.velocity.1 = 0.004;
 	    },
 	    _ => (),
 	}
 
 	// logic
-	birdy.velocity.1 += -0.009 * time_delta.as_secs_f32();
+	birdy.velocity.1 += ACCEL_GRAV * time_delta.as_secs_f32();
+	if birdy.velocity.1 < TERM_VEL {
+	    birdy.velocity.1 = TERM_VEL;
+	}
 	birdy.pos.0 += birdy.velocity.0;
 	birdy.pos.1 += birdy.velocity.1;
 
