@@ -16,6 +16,7 @@ struct Bird {
     pos: (f32, f32),
     velocity: (f32, f32),
     model: Vec<Vert>,
+    hit_box: ((f32, f32), (f32, f32)),
 }
 impl Bird {
     fn new () -> Bird {
@@ -48,6 +49,7 @@ impl Bird {
 		    color: (1.0, 0.9, 0.0),
 		},
 	    ],
+	    hit_box: ((-0.1, -0.1), (0.1, 0.1)),
 	}
     }
     // obviouly need to repalce with a better, translation matrix-based approach
@@ -129,7 +131,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	    birdy.velocity.1 = TERM_VEL;
 	}
 	birdy.pos.0 += birdy.velocity.0;
+	if birdy.pos.0 + birdy.hit_box.0.0 < -1.0 {
+	    birdy.pos.0 = -1.0 - birdy.hit_box.0.0;
+	}
+	if birdy.pos.0 + birdy.hit_box.1.0 > 1.0 {
+	    birdy.pos.0 = 1.0 - birdy.hit_box.1.0;
+	}
 	birdy.pos.1 += birdy.velocity.1;
+	if birdy.pos.1 + birdy.hit_box.0.1< -1.0 {
+	    birdy.pos.1 = -1.0 - birdy.hit_box.0.1;
+	    birdy.velocity.1 *= -0.5 // bounce
+	}
+	if birdy.pos.1 + birdy.hit_box.1.1 > 1.0 {
+	    birdy.pos.1 = 1.0 - birdy.hit_box.1.1;
+	}
 
 	// render to framebuffer
 	let mut f_buff = disp.draw(); // next framebuffer
