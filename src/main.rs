@@ -52,7 +52,7 @@ impl Bird {
 	    hit_box: ((-0.1, -0.1), (0.1, 0.1)),
 	}
     }
-    // obviouly need to repalce with a better, translation matrix-based approach
+    // obviouly need to replace with a better, translation matrix-based approach
     fn draw (&self) -> Vec<Vert> {
 	let mut model = self.model.clone();
 	for mut vrtx in model.iter_mut() {
@@ -77,10 +77,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cntxt_b = glium::glutin::ContextBuilder::new();
     let disp = glium::Display::new(win_b, cntxt_b, &eve_lp)?;
 
-    // shaders
-    let vert_shdr = std::fs::read_to_string("./vert.glsl")?;
-    let frag_shdr = std::fs::read_to_string("./frag.glsl")?;
-    let shdr = glium::program::Program::from_source(&disp, &vert_shdr, &frag_shdr, None)?;
+    // compile and link shaders
+    let shdr = glium::program::Program::from_source(
+	&disp,
+	&std::fs::read_to_string("./vert.glsl")?,
+	&std::fs::read_to_string("./frag.glsl")?,
+	None
+    )?;
 
     // gameplay variables
     let mut last_jump_time = None;
@@ -111,7 +114,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 			virtual_keycode: Some(glium::glutin::event::VirtualKeyCode::Space),
 			..
 		    },
-		    is_synthetic: false, // true indicates key was already pressed when window gainend focus
+		    is_synthetic: false, // true indicates key was already pressed when window gained focus
 		    ..
 		},
 		..
