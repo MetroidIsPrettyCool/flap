@@ -1,8 +1,9 @@
 use glium::Surface;
 
 const JUMP_COOLDOWN: std::time::Duration = std::time::Duration::from_millis(250);
-const ACCEL_GRAV: f32 = -0.009;
-const TERM_VEL: f32 = -0.01;
+const ACCEL_GRAV: f32 = -0.9;
+const TERM_VEL: f32 = -1.0;
+const ROCK_COOLDOWN: std::time::Duration = std::time::Duration::from_millis(750);
 
 #[derive(Copy, Clone)]
 struct Vert {
@@ -15,16 +16,7 @@ glium::implement_vertex!(Vert, pos, color);
 struct PhysObj {
     pos: (f32, f32),
     velocity: (f32, f32),
-    hit_box: ((f32, f32), (f32, f32)),
-}
-impl PhysObj {
-    fn new () -> PhysObj {
-	PhysObj {
-	    pos: (0.0, 0.0),
-	    velocity: (0.0, 0.0),
-	    hit_box: ((-0.1, -0.1), (0.1, 0.1)),
-	}
-    }
+    size: f32,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -52,7 +44,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // gameplay variables
     let mut last_jump_time = None;
-    let mut birdy = PhysObj::new();
+    let mut last_rock_spawn_time = None;
+    let mut rock_fall_dir = 1.0;
+    let mut birdy = PhysObj {
+	pos: (0.0, 0.0),
+	velocity: (0.0, 0.0),
+	size: 0.1,
+    };
+
+    let mut rocks = Vec::new();
 
     // main loop
     eve_lp.run(move |eve, _, ctrl_flow| {
@@ -89,43 +89,79 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		    Some(time) => now.duration_since(time)
 		} > JUMP_COOLDOWN {
 		    last_jump_time = Some(now);
-		    birdy.velocity.1 = 0.004;
+		    birdy.velocity.1 = 0.8;
 		},
-		glium::glutin::event::VirtualKeyCode::Left => birdy.velocity.0 = -0.0015,
-		glium::glutin::event::VirtualKeyCode::Right => birdy.velocity.0 = 0.0015,
+		glium::glutin::event::VirtualKeyCode::Left => birdy.velocity.0 = -0.6,
+		glium::glutin::event::VirtualKeyCode::Right => birdy.velocity.0 = 0.6,
 		_ => (),
 	    },
 	    _ => (),
 	}
 
 	// logic
+
+	// player stuff
+	birdy.pos.0 += birdy.velocity.0 * time_delta.as_secs_f32();
+	if birdy.pos.0 - birdy.size < -1.0 {
+	    birdy.pos.0 = -1.0 + birdy.size;
+	}
+	if birdy.pos.0 + birdy.size > 1.0 {
+	    birdy.pos.0 = 1.0 - birdy.size;
+	}
+	birdy.pos.1 += birdy.velocity.1 * time_delta.as_secs_f32();
+	if birdy.pos.1 - birdy.size < -1.0 {
+	    birdy.pos.1 = -1.0 + birdy.size;
+	    birdy.velocity.1 *= -0.5 // bounce
+	}
+	if birdy.pos.1 + birdy.size > 1.0 {
+	    birdy.pos.1 = 1.0 - birdy.size;
+	}
 	birdy.velocity.1 += ACCEL_GRAV * time_delta.as_secs_f32();
 	if birdy.velocity.1 < TERM_VEL {
 	    birdy.velocity.1 = TERM_VEL;
 	}
-	birdy.pos.0 += birdy.velocity.0;
-	if birdy.pos.0 + birdy.hit_box.0.0 < -1.0 {
-	    birdy.pos.0 = -1.0 - birdy.hit_box.0.0;
-	}
-	if birdy.pos.0 + birdy.hit_box.1.0 > 1.0 {
-	    birdy.pos.0 = 1.0 - birdy.hit_box.1.0;
-	}
-	birdy.pos.1 += birdy.velocity.1;
-	if birdy.pos.1 + birdy.hit_box.0.1< -1.0 {
-	    birdy.pos.1 = -1.0 - birdy.hit_box.0.1;
-	    birdy.velocity.1 *= -0.5 // bounce
-	}
-	if birdy.pos.1 + birdy.hit_box.1.1 > 1.0 {
-	    birdy.pos.1 = 1.0 - birdy.hit_box.1.1;
-	}
 	let tmp = birdy.velocity.0;
-	birdy.velocity.0 -= (0.001 * time_delta.as_secs_f32()) * f32::signum(birdy.velocity.0);
+	birdy.velocity.0 -= (0.4 * time_delta.as_secs_f32()) * f32::signum(birdy.velocity.0);
 	if tmp.is_sign_positive() != birdy.velocity.0.is_sign_positive() {
 	    birdy.velocity.0 = 0.0;
 	}
 
+	// rock stuff
+	if match last_rock_spawn_time {
+	    None => std::time::Duration::MAX,
+	    Some(time) => now.duration_since(time)
+	} > ROCK_COOLDOWN {
+	    last_rock_spawn_time = Some(now);
+	    let size = rand::random::<f32>() * 0.025 + 0.175;
+	    let mut x = rand::random::<f32>() * (1.0 - size);
+	    if rand::random() {
+		x *= -1.0;
+	    }
+	    rocks.push(
+		PhysObj {
+		    pos: (x, 1.5 * rock_fall_dir),
+		    velocity: (0.0, rock_fall_dir * (rand::random::<f32>() * -0.5 - 0.5)),
+		    size: size,
+		}
+	    );
+	    rock_fall_dir *= -1.0;
+	}
+	for mut rock in rocks.iter_mut() {
+	    rock.pos.0 += rock.velocity.0 * time_delta.as_secs_f32();
+	    rock.pos.1 += rock.velocity.1 * time_delta.as_secs_f32();
+	}
+	let mut i = 0;
+	while i < rocks.len() {
+	    if f32::abs(rocks[i].pos.1) > 2.0 {
+		rocks.remove(i);
+	    }
+	    else {
+		i += 1;
+	    }
+	}
+
 	// get all our vertices together
-	let mut vertices = vec![
+	let mut vertices = vec![ // bird
 	    Vert {
 		pos: (0.1, 0.0, 0.0),
 		color: (1.0, 0.9, 0.0),
@@ -155,8 +191,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	    (*vrtx).pos.0 += birdy.pos.0;
 	    (*vrtx).pos.1 += birdy.pos.1;
 	}
-	vertices.extend_from_slice(
+
+	for mut rock in rocks.iter_mut() {
+	    vertices.extend_from_slice( // playfield
+		&[
+		    Vert {
+			pos: (rock.size + rock.pos.0, 0.0 + rock.pos.1, 0.0),
+			color: (0.5, 0.5, 0.6),
+		    },
+		    Vert {
+			pos: (0.0 + rock.pos.0, rock.size + rock.pos.1, 0.0),
+			color: (0.5, 0.5, 0.6),
+		    },
+		    Vert {
+			pos: (-1.0 * rock.size + rock.pos.0, 0.0 + rock.pos.1, 0.0),
+			color: (0.5, 0.5, 0.6),
+		    },
+		    Vert {
+			pos: (rock.size + rock.pos.0, 0.0 + rock.pos.1, 0.0),
+			color: (0.5, 0.5, 0.6),
+		    },
+		    Vert {
+			pos: (-1.0 * rock.size + rock.pos.0, 0.0 + rock.pos.1, 0.0),
+			color: (0.5, 0.5, 0.6),
+		    },
+		    Vert {
+			pos: (0.0 + rock.pos.0, -1.0 * rock.size + rock.pos.1, 0.0),
+			color: (0.5, 0.5, 0.6),
+		    },
+		]
+	    );
+	}
+
+	vertices.extend_from_slice( // playfield
 	    &[
+		// Background
 		Vert {
 		    pos: (1.0, 1.0, 0.5),
 		    color: (0.0, 1.0, 0.5),
@@ -181,8 +250,60 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		    pos: (1.0, -1.0, 0.5),
 		    color: (0.0, 1.0, 0.5),
 		},
+		// left side
+		Vert {
+		    pos: (-0.5, -0.5, 0.4),
+		    color: (1.0, 0.0, 0.5),
+		},
+		Vert {
+		    pos: (-1.0, -0.5, 0.4),
+		    color: (1.0, 0.0, 0.5),
+		},
+		Vert {
+		    pos: (-1.0, -1.0, 0.4),
+		    color: (1.0, 0.0, 0.5),
+		},
+		Vert {
+		    pos: (-0.5, -0.5, 0.4),
+		    color: (1.0, 0.0, 0.5),
+		},
+		Vert {
+		    pos: (-1.0, -1.0, 0.4),
+		    color: (1.0, 0.0, 0.5),
+		},
+		Vert {
+		    pos: (-0.5, -1.0, 0.4),
+		    color: (1.0, 0.0, 0.5),
+		},
+		// right side
+		Vert {
+		    pos: (1.0, 1.0, 0.4),
+		    color: (0.5, 1.0, 0.0),
+		},
+		Vert {
+		    pos: (0.5, 1.0, 0.4),
+		    color: (0.5, 1.0, 0.0),
+		},
+		Vert {
+		    pos: (0.5, 0.5, 0.4),
+		    color: (0.5, 1.0, 0.0),
+		},
+		Vert {
+		    pos: (1.0, 1.0, 0.4),
+		    color: (0.5, 1.0, 0.0),
+		},
+		Vert {
+		    pos: (0.5, 0.5, 0.4),
+		    color: (0.5, 1.0, 0.0),
+		},
+		Vert {
+		    pos: (1.0, 0.5, 0.4),
+		    color: (0.5, 1.0, 0.0),
+		},
 	    ]
 	);
+
+	// scaling
 	if win_size_px.0 > win_size_px.1 {
 	    for mut vrtx in vertices.iter_mut() {
 		(*vrtx).pos.0 *= win_size_px.1 as f32 / win_size_px.0 as f32;
