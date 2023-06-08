@@ -21,32 +21,17 @@ const ROCK_MIN_SIZE: f32 = 0.05;
 const ROCK_MAX_SIZE: f32 = 0.2;
 
 const PLAYFIELD_BOUNCE_COEFFICIENT: f32 = -0.5; // portion of player's velocity to reflect when they collide with the bottom of the playfield.
-
-const PLAYFIELD_BACKGROUND_COLOR: (f32, f32, f32) = (0.0, 1.0, 0.5);
-const PLAYFIELD_BACKGROUND_DEPTH: f32 = 0.6;
-const PLAYFIELD_BACKGROUND_POSITION: (f32, f32) = (0.0, 0.0);
-const PLAYFIELD_BACKGROUND_SIZE: f32 = 1.0;
-
-const PLAYFIELD_SCORE_ZONE_DEPTH: f32 = 0.4;
+const PLAYFIELD_MODEL: Quad = square_from_edge_positions(
+    -1.0,
+    1.0,
+    1.0,
+    -1.0,
+    0.6,
+    (0.0, 1.0, 0.5)
+);
 
 const WINDOW_INITIAL_WIDTH: u32 = 1024;
 const WINDOW_INITIAL_HEIGHT: u32 = 768;
-
-// const PLAYFIELD_SCORE_ZONE_LT_COLOR: (f32, f32, f32) = (0.0, 0.0, 0.0);
-// const PLAYFIELD_SCORE_ZONE_LT_POSITION: (f32, f32) = (-0.75, 0.75);
-// const PLAYFIELD_SCORE_ZONE_LT_SIZE: f32 = 0.25;
-
-const PLAYFIELD_SCORE_ZONE_RT_COLOR: (f32, f32, f32) = (0.5, 1.0, 0.0);
-const PLAYFIELD_SCORE_ZONE_RT_POSITION: (f32, f32) = (0.75, 0.75);
-const PLAYFIELD_SCORE_ZONE_RT_SIZE: f32 = 0.25;
-
-// const PLAYFIELD_SCORE_ZONE_RB_COLOR: (f32, f32, f32) = (0.0, 0.0, 0.0);
-// const PLAYFIELD_SCORE_ZONE_RB_POSITION: (f32, f32) = (0.75, -0.75);
-// const PLAYFIELD_SCORE_ZONE_RB_SIZE: f32 = 0.25;
-
-const PLAYFIELD_SCORE_ZONE_LB_COLOR: (f32, f32, f32) = (1.0, 0.0, 0.5);
-const PLAYFIELD_SCORE_ZONE_LB_POSITION: (f32, f32) = (-0.75, -0.75);
-const PLAYFIELD_SCORE_ZONE_LB_SIZE: f32 = 0.25;
 
 
 #[derive(Copy, Clone)]
@@ -102,7 +87,7 @@ fn diamond_from_dims(width: f32, height: f32, depth: f32, center: (f32, f32), co
 	}
     )
 }
-fn square_from_dims(width: f32, height: f32, depth: f32, center: (f32, f32), color: (f32, f32, f32)) -> Quad {
+fn _square_from_dims(width: f32, height: f32, depth: f32, center: (f32, f32), color: (f32, f32, f32)) -> Quad {
     let center_x = center.0;
     let center_y = center.1;
     quad_from_verts(
@@ -124,7 +109,7 @@ fn square_from_dims(width: f32, height: f32, depth: f32, center: (f32, f32), col
 	}
     )
 }
-const fn _square_from_edge_positions(left: f32, right: f32, top: f32, bottom: f32, depth: f32, color: (f32, f32, f32)) -> Quad {
+const fn square_from_edge_positions(left: f32, right: f32, top: f32, bottom: f32, depth: f32, color: (f32, f32, f32)) -> Quad {
     quad_from_verts(
 	Vert {
 	    position: (left,  top,    depth),
@@ -149,6 +134,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // renderer variables
     let mut next_frame_time = std::time::Instant::now();
     let mut then = std::time::Instant::now();
+    let mut window_aspect_ratio = WINDOW_INITIAL_WIDTH as f32 / WINDOW_INITIAL_HEIGHT as f32;
 
     let mut frame_times = Vec::new();
 
@@ -195,6 +181,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		event: glium::glutin::event::WindowEvent::CloseRequested,
 		..
 	    } => *ctrl_flow = glium::glutin::event_loop::ControlFlow::ExitWithCode(0),
+	    glium::glutin::event::Event::WindowEvent {
+		event: glium::glutin::event::WindowEvent::Resized(size),
+		..
+	    } => {
+		window_aspect_ratio = size.width as f32 / size.height as f32;
+	    },
 	    glium::glutin::event::Event::WindowEvent {
 		event: glium::glutin::event::WindowEvent::KeyboardInput {
 		    input: glium::glutin::event::KeyboardInput {
@@ -291,47 +283,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		&diamond_from_dims(rock.size, rock.size, ROCK_DEPTH, rock.position, ROCK_COLOR)
 	    );
 	}
-	// playfield
-	vertices.extend_from_slice( // background
-	    &square_from_dims(
-		PLAYFIELD_BACKGROUND_SIZE,
-		PLAYFIELD_BACKGROUND_SIZE,
-		PLAYFIELD_BACKGROUND_DEPTH,
-		PLAYFIELD_BACKGROUND_POSITION,
-		PLAYFIELD_BACKGROUND_COLOR
-	    )
-	);
-	vertices.extend_from_slice( // left-bottom
-	    &square_from_dims(
-		PLAYFIELD_SCORE_ZONE_LB_SIZE,
-		PLAYFIELD_SCORE_ZONE_LB_SIZE,
-		PLAYFIELD_SCORE_ZONE_DEPTH,
-		PLAYFIELD_SCORE_ZONE_LB_POSITION,
-		PLAYFIELD_SCORE_ZONE_LB_COLOR
-	    )
-	);
-	vertices.extend_from_slice( // right-top
-	    &square_from_dims(
-		PLAYFIELD_SCORE_ZONE_RT_SIZE,
-		PLAYFIELD_SCORE_ZONE_RT_SIZE,
-		PLAYFIELD_SCORE_ZONE_DEPTH,
-		PLAYFIELD_SCORE_ZONE_RT_POSITION,
-		PLAYFIELD_SCORE_ZONE_RT_COLOR
-	    )
-	);
 
-	// scale playfield to square
-	let (window_width, window_height) = disp.get_framebuffer_dimensions();
-	if window_width > window_height {
-	    for mut vrtx in vertices.iter_mut() {
-		(*vrtx).position.0 *= window_height as f32 / window_width as f32;
-	    }
-	}
-	if window_width < window_height {
-	    for mut vrtx in vertices.iter_mut() {
-		(*vrtx).position.1 *= window_width as f32 / window_height as f32;
-	    }
-	}
+	vertices.extend_from_slice(&PLAYFIELD_MODEL); // playfield
 
 	// render to framebuffer
 	let mut f_buff = disp.draw(); // next framebuffer
@@ -351,7 +304,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		glium::index::PrimitiveType::TrianglesList // polygon type
 	    ),
 	    &shdr, // shader program
-	    &glium::uniforms::EmptyUniforms, // no uniforms
+	    &glium::uniform! {
+		window_aspect_ratio: window_aspect_ratio,
+	    },
 	    &glium::DrawParameters { // draw parameters
 		depth: glium::Depth {
 		    test: glium::draw_parameters::DepthTest::IfLess,
@@ -367,12 +322,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	then = now;
 	frame_times.push(now.elapsed());
 	if frame_times.len() == 60 {
-	    let mut avg_frame_time = std::time::Duration::ZERO;
+	    let mut total_frame_time = std::time::Duration::ZERO;
 	    for frame_time in frame_times.iter() {
-		avg_frame_time += *frame_time;
+		total_frame_time += *frame_time;
 	    }
-	    avg_frame_time /= 60;
-	    println!("{:?}", avg_frame_time);
+	    println!("total: {:?}", total_frame_time);
+	    println!("avg: {:?}", total_frame_time / 60);
+	    println!("");
 	    frame_times = Vec::new();
 	}
     });
