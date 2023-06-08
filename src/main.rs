@@ -54,6 +54,32 @@ impl PhysObj {
     }
 }
 
+#[derive(Clone)]
+struct GameState {
+    last_jump_time: Option<std::time::Instant>,
+    last_rock_spawn_time: Option<std::time::Instant>,
+    rock_fall_direction: f32,
+    birdy: PhysObj,
+    rocks: Vec<PhysObj>,
+    dead: bool,
+}
+impl GameState {
+    fn new () -> GameState {
+	GameState {
+	    last_jump_time: None,
+	    last_rock_spawn_time: None,
+	    rock_fall_direction: 1.0,
+	    birdy: PhysObj {
+		position: (0.0, 0.0),
+		velocity: (0.0, 0.0),
+		size: BIRDY_SIZE,
+	    },
+	    rocks: Vec::new(),
+	    dead: false,
+	}
+    }
+}
+
 fn rand_range(min: f32, max: f32) -> f32 {
     rand::random::<f32>() * (max - min) + min
 }
@@ -65,29 +91,7 @@ const fn quad_from_verts(lt: Vert, rt: Vert, rb: Vert, lb: Vert) -> Quad {
 	rt, lb, rb
     ]
 }
-fn diamond_from_dims(width: f32, height: f32, depth: f32, center: (f32, f32), color: (f32, f32, f32)) -> Quad {
-    let center_x = center.0;
-    let center_y = center.1;
-    quad_from_verts(
-	Vert {
-	    position: (center_x,         center_y + height, depth),
-	    color: color,
-	},
-	Vert {
-	    position: (center_x + width, center_y,          depth),
-	    color: color,
-	},
-	Vert {
-	    position: (center_x,         center_y - height, depth),
-	    color: color,
-	},
-	Vert {
-	    position: (center_x - width, center_y,          depth),
-	    color: color,
-	}
-    )
-}
-fn _square_from_dims(width: f32, height: f32, depth: f32, center: (f32, f32), color: (f32, f32, f32)) -> Quad {
+fn square_from_dims(width: f32, height: f32, depth: f32, center: (f32, f32), color: (f32, f32, f32)) -> Quad {
     let center_x = center.0;
     let center_y = center.1;
     quad_from_verts(
@@ -135,7 +139,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut next_frame_time = std::time::Instant::now();
     let mut then = std::time::Instant::now();
     let mut window_aspect_ratio = WINDOW_INITIAL_WIDTH as f32 / WINDOW_INITIAL_HEIGHT as f32;
-
     let mut frame_times = Vec::new();
 
     // initial setup
@@ -155,17 +158,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	None
     )?;
 
-    // gameplay variables
-    let mut last_jump_time = None;
-    let mut last_rock_spawn_time = None;
-    let mut rock_fall_dir = 1.0;
-    let mut birdy = PhysObj {
-	position: (0.0, 0.0),
-	velocity: (0.0, 0.0),
-	size: BIRDY_SIZE,
-    };
-
-    let mut rocks = Vec::new();
+    let mut game_state = GameState::new();
 
     // main loop
     eve_lp.run(move |eve, _, ctrl_flow| {
@@ -175,12 +168,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	next_frame_time += std::time::Duration::from_nanos(16_666_667); // next frame should render 1/60 sec later
 	*ctrl_flow = glium::glutin::event_loop::ControlFlow::WaitUntil(next_frame_time);
 
+	// upkeep
+	if game_state.dead {
+	    game_state = GameState::new();
+	}
+
 	// handle events
 	match eve {
 	    glium::glutin::event::Event::WindowEvent {
 		event: glium::glutin::event::WindowEvent::CloseRequested,
 		..
-	    } => *ctrl_flow = glium::glutin::event_loop::ControlFlow::ExitWithCode(0),
+	    } => {
+		*ctrl_flow = glium::glutin::event_loop::ControlFlow::ExitWithCode(0);
+		return;
+	    },
 	    glium::glutin::event::Event::WindowEvent {
 		event: glium::glutin::event::WindowEvent::Resized(size),
 		..
@@ -199,15 +200,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		},
 		..
 	    } => match keycode {
-		glium::glutin::event::VirtualKeyCode::Space => if match last_jump_time {
+		glium::glutin::event::VirtualKeyCode::Space => if match game_state.last_jump_time {
 		    None => std::time::Duration::MAX,
 		    Some(time) => now.duration_since(time)
 		} > BIRDY_JUMP_COOLDOWN {
-		    last_jump_time = Some(now);
-		    birdy.velocity.1 = BIRDY_ACCEL_JUMP;
+		    game_state.last_jump_time = Some(now);
+		    game_state.birdy.velocity.1 = BIRDY_ACCEL_JUMP;
 		},
-		glium::glutin::event::VirtualKeyCode::Left => birdy.velocity.0 = BIRDY_ACCEL_MOVE * -1.0,
-		glium::glutin::event::VirtualKeyCode::Right => birdy.velocity.0 = BIRDY_ACCEL_MOVE,
+		glium::glutin::event::VirtualKeyCode::Left => game_state.birdy.velocity.0 = BIRDY_ACCEL_MOVE * -1.0,
+		glium::glutin::event::VirtualKeyCode::Right => game_state.birdy.velocity.0 = BIRDY_ACCEL_MOVE,
 		_ => (),
 	    },
 	    _ => (),
@@ -216,74 +217,85 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	// logic
 
 	// player stuff
-	birdy.position_delta(time_delta);
-	if birdy.position.0 - birdy.size < -1.0 {
-	    birdy.position.0 = -1.0 + birdy.size;
+	game_state.birdy.position_delta(time_delta);
+	if game_state.birdy.position.0 - game_state.birdy.size < -1.0 {
+	    game_state.birdy.position.0 = -1.0 + game_state.birdy.size;
 	}
-	if birdy.position.0 + birdy.size > 1.0 {
-	    birdy.position.0 = 1.0 - birdy.size;
+	if game_state.birdy.position.0 + game_state.birdy.size > 1.0 {
+	    game_state.birdy.position.0 = 1.0 - game_state.birdy.size;
 	}
-	if birdy.position.1 - birdy.size < -1.0 {
-	    birdy.position.1 = -1.0 + birdy.size;
-	    birdy.velocity.1 *= PLAYFIELD_BOUNCE_COEFFICIENT; // bounce
+	if game_state.birdy.position.1 - game_state.birdy.size < -1.0 {
+	    game_state.birdy.position.1 = -1.0 + game_state.birdy.size;
+	    game_state.birdy.velocity.1 *= PLAYFIELD_BOUNCE_COEFFICIENT; // bounce
 	}
-	if birdy.position.1 + birdy.size > 1.0 {
-	    birdy.position.1 = 1.0 - birdy.size;
+	if game_state.birdy.position.1 + game_state.birdy.size > 1.0 {
+	    game_state.birdy.position.1 = 1.0 - game_state.birdy.size;
 	}
-	birdy.velocity.1 += BIRDY_ACCEL_GRAV * time_delta;
-	if birdy.velocity.1 < BIRDY_TERMINAL_VELOCITY {
-	    birdy.velocity.1 = BIRDY_TERMINAL_VELOCITY;
+	game_state.birdy.velocity.1 += BIRDY_ACCEL_GRAV * time_delta;
+	if game_state.birdy.velocity.1 < BIRDY_TERMINAL_VELOCITY {
+	    game_state.birdy.velocity.1 = BIRDY_TERMINAL_VELOCITY;
 	}
-	let tmp = birdy.velocity.0;
-	birdy.velocity.0 += (BIRDY_DECCEL_MOVE * time_delta) * f32::signum(birdy.velocity.0);
-	if tmp.is_sign_positive() != birdy.velocity.0.is_sign_positive() {
-	    birdy.velocity.0 = 0.0;
+	let tmp = game_state.birdy.velocity.0;
+	game_state.birdy.velocity.0 += (BIRDY_DECCEL_MOVE * time_delta) * f32::signum(game_state.birdy.velocity.0);
+	if tmp.is_sign_positive() != game_state.birdy.velocity.0.is_sign_positive() {
+	    game_state.birdy.velocity.0 = 0.0;
 	}
 
 	// rock stuff
-	if match last_rock_spawn_time {
+	if match game_state.last_rock_spawn_time {
 	    None => std::time::Duration::MAX,
 	    Some(time) => now.duration_since(time)
 	} > ROCK_COOLDOWN {
-	    last_rock_spawn_time = Some(now);
+	    game_state.last_rock_spawn_time = Some(now);
 	    let size = rand_range(ROCK_MIN_SIZE, ROCK_MAX_SIZE);
 	    let mut x = rand::random::<f32>() * (1.0 - size);
 	    if rand::random() {
 		x *= -1.0;
 	    }
-	    rocks.push(
+	    game_state.rocks.push(
 		PhysObj {
-		    position: (x, ROCK_SPAWN_DIST * rock_fall_dir),
-		    velocity: (0.0, rock_fall_dir * -1.0 * rand_range(ROCK_MIN_VELOCITY, ROCK_MAX_VELOCITY)),
+		    position: (x, ROCK_SPAWN_DIST * game_state.rock_fall_direction),
+		    velocity: (0.0, game_state.rock_fall_direction * -1.0 * rand_range(ROCK_MIN_VELOCITY, ROCK_MAX_VELOCITY)),
 		    size: size,
 		}
 	    );
-	    rock_fall_dir *= -1.0;
+	    game_state.rock_fall_direction *= -1.0;
 	}
-	for rock in rocks.iter_mut() {
+	for rock in game_state.rocks.iter_mut() {
 	    rock.position_delta(time_delta);
 	}
 	let mut i = 0;
-	while i < rocks.len() {
-	    if f32::abs(rocks[i].position.1) > ROCK_DESPAWN_DIST {
-		rocks.remove(i);
+	while i < game_state.rocks.len() {
+	    if f32::abs(game_state.rocks[i].position.1) > ROCK_DESPAWN_DIST {
+		game_state.rocks.remove(i);
 	    }
 	    else {
 		i += 1;
 	    }
 	}
 
+	// birdy-rock collision
+	for rock in game_state.rocks.iter() {
+	    if f32::abs(rock.position.1) <= 1.0 + rock.size &&
+		rock.position.0 - rock.size < game_state.birdy.position.0 + game_state.birdy.size &&
+		rock.position.0 + rock.size > game_state.birdy.position.0 - game_state.birdy.size &&
+		rock.position.1 - rock.size < game_state.birdy.position.1 + game_state.birdy.size &&
+		rock.position.1 + rock.size > game_state.birdy.position.1 - game_state.birdy.size {
+		    game_state.dead = true;
+		    break;
+		}
+	}
+
 	// get all our vertices together
 	let mut vertices = Vec::new();
 	vertices.extend_from_slice(
-	    &diamond_from_dims(birdy.size, birdy.size, BIRDY_DEPTH, birdy.position, BIRDY_COLOR)
+	    &square_from_dims(game_state.birdy.size, game_state.birdy.size, BIRDY_DEPTH, game_state.birdy.position, BIRDY_COLOR)
 	);
-	for rock in rocks.iter() { // rocks, duh
+	for rock in game_state.rocks.iter() { // rocks, duh
 	    vertices.extend_from_slice(
-		&diamond_from_dims(rock.size, rock.size, ROCK_DEPTH, rock.position, ROCK_COLOR)
+		&square_from_dims(rock.size, rock.size, ROCK_DEPTH, rock.position, ROCK_COLOR)
 	    );
 	}
-
 	vertices.extend_from_slice(&PLAYFIELD_MODEL); // playfield
 
 	// render to framebuffer
