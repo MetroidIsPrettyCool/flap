@@ -3,11 +3,11 @@
 uniform float window_aspect_ratio;
 
 in vec3 position;
-in vec3 color;
-out vec3 v_color;
+in vec2 texture_coordinates;
+out vec2 v_texture_coordinates;
 
 void main () {
-  v_color = color;
+  v_texture_coordinates = texture_coordinates;
   gl_Position = vec4(position, 1.0);
   if (window_aspect_ratio > 1) {
     gl_Position.x /= window_aspect_ratio;

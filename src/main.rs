@@ -6,7 +6,6 @@ const BIRDY_ACCEL_MOVE: f32 = 0.6;
 const BIRDY_DECCEL_MOVE: f32 = -0.4; // decceleration applied when player isn't holding a direction key
 const BIRDY_JUMP_COOLDOWN: std::time::Duration = std::time::Duration::from_millis(250);
 const BIRDY_TERMINAL_VELOCITY: f32 = -1.0;
-const BIRDY_COLOR: (f32, f32, f32) = (1.0, 0.9, 0.0);
 const BIRDY_DEPTH: f32 = 0.0;
 const BIRDY_SIZE: f32 = 0.1;
 
@@ -15,7 +14,6 @@ const ROCK_DESPAWN_DIST: f32 = 2.0;
 const ROCK_MIN_VELOCITY: f32 = 0.5;
 const ROCK_MAX_VELOCITY: f32 = 1.0;
 const ROCK_SPAWN_DIST: f32 = 1.5;
-const ROCK_COLOR: (f32, f32, f32) = (0.2, 0.2, 0.3);
 const ROCK_DEPTH: f32 = 0.1;
 const ROCK_MIN_SIZE: f32 = 0.05;
 const ROCK_MAX_SIZE: f32 = 0.2;
@@ -27,19 +25,95 @@ const PLAYFIELD_MODEL: Quad = square_from_edge_positions(
     1.0,
     -1.0,
     0.6,
-    (0.0, 1.0, 0.5)
+    ((0.0, 0.0), (8.0 / 64.0, 8.0 / 64.0))
 );
 
 const WINDOW_INITIAL_WIDTH: u32 = 1024;
 const WINDOW_INITIAL_HEIGHT: u32 = 768;
 
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[derive(Copy, Clone)]
+    #[test]
+    fn square_from_edge_positions() {
+        assert_eq!(
+	    [
+		Vert { // rt
+		    position: (1.0, 1.0, 0.6),
+		    texture_coordinates: (0.125, 0.0),
+		},
+		Vert { // lt
+		    position: (-1.0, 1.0, 0.6),
+		    texture_coordinates: (0.0, 0.0),
+		},
+		Vert { // lb
+		    position: (-1.0, -1.0, 0.6),
+		    texture_coordinates: (0.0, 0.125),
+		},
+		Vert { // rt
+		    position: (1.0, 1.0, 0.6),
+		    texture_coordinates: (0.125, 0.0),
+		},
+		Vert { // lb
+		    position: (-1.0, -1.0, 0.6),
+		    texture_coordinates: (0.0, 0.125),
+		},
+		Vert { // rb
+		    position: (1.0, -1.0, 0.6),
+		    texture_coordinates: (0.125, 0.125),
+		},
+	    ],
+	    PLAYFIELD_MODEL
+	);
+    }
+
+    #[test]
+    fn square_from_dims() {
+        assert_eq!(
+	    [
+		Vert { // rt
+		    position: (1.0, 1.0, 0.6),
+		    texture_coordinates: (1.0, 0.0),
+		},
+		Vert { // lt
+		    position: (-1.0, 1.0, 0.6),
+		    texture_coordinates: (0.0, 0.0),
+		},
+		Vert { // lb
+		    position: (-1.0, -1.0, 0.6),
+		    texture_coordinates: (0.0, 1.0),
+		},
+		Vert { // rt
+		    position: (1.0, 1.0, 0.6),
+		    texture_coordinates: (1.0, 0.0),
+		},
+		Vert { // lb
+		    position: (-1.0, -1.0, 0.6),
+		    texture_coordinates: (0.0, 1.0),
+		},
+		Vert { // rb
+		    position: (1.0, -1.0, 0.6),
+		    texture_coordinates: (1.0, 1.0),
+		},
+	    ],
+	    super::square_from_dims(
+		1.0,
+		1.0,
+		0.6,
+		(0.0, 0.0),
+		((0.0, 0.0), (1.0, 1.0))
+	    )
+	);
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
 struct Vert {
     position: (f32, f32, f32),
-    color: (f32, f32, f32),
+    texture_coordinates: (f32, f32),
 }
-glium::implement_vertex!(Vert, position, color);
+glium::implement_vertex!(Vert, position, texture_coordinates);
 
 #[derive(Copy, Clone)]
 struct PhysObj {
@@ -91,45 +165,45 @@ const fn quad_from_verts(lt: Vert, rt: Vert, rb: Vert, lb: Vert) -> Quad {
 	rt, lb, rb
     ]
 }
-fn square_from_dims(width: f32, height: f32, depth: f32, center: (f32, f32), color: (f32, f32, f32)) -> Quad {
+fn square_from_dims(width: f32, height: f32, depth: f32, center: (f32, f32), texture_coordinates: ((f32, f32), (f32, f32))) -> Quad {
     let center_x = center.0;
     let center_y = center.1;
     quad_from_verts(
 	Vert {
 	    position: (center_x - width, center_y + height, depth),
-	    color: color,
+	    texture_coordinates: (texture_coordinates.0.0, texture_coordinates.0.1),
 	},
 	Vert {
 	    position: (center_x + width, center_y + height, depth),
-	    color: color,
+	    texture_coordinates: (texture_coordinates.1.0, texture_coordinates.0.1),
 	},
 	Vert {
 	    position: (center_x + width, center_y - height, depth),
-	    color: color,
+	    texture_coordinates: (texture_coordinates.1.0, texture_coordinates.1.1),
 	},
 	Vert {
 	    position: (center_x - width, center_y - height, depth),
-	    color: color,
+	    texture_coordinates: (texture_coordinates.0.0, texture_coordinates.1.1),
 	}
     )
 }
-const fn square_from_edge_positions(left: f32, right: f32, top: f32, bottom: f32, depth: f32, color: (f32, f32, f32)) -> Quad {
+const fn square_from_edge_positions(left: f32, right: f32, top: f32, bottom: f32, depth: f32, texture_coordinates: ((f32, f32), (f32, f32))) -> Quad {
     quad_from_verts(
 	Vert {
 	    position: (left,  top,    depth),
-	    color: color,
+	    texture_coordinates: (texture_coordinates.0.0, texture_coordinates.0.1),
 	},
 	Vert {
 	    position: (right, top,    depth),
-	    color: color,
+	    texture_coordinates: (texture_coordinates.1.0, texture_coordinates.0.1),
 	},
 	Vert {
 	    position: (right, bottom, depth),
-	    color: color,
+	    texture_coordinates: (texture_coordinates.1.0, texture_coordinates.1.1),
 	},
 	Vert {
 	    position: (left,  bottom, depth),
-	    color: color,
+	    texture_coordinates: (texture_coordinates.0.0, texture_coordinates.1.1),
 	}
     )
 }
@@ -147,15 +221,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_inner_size(glium::glutin::dpi::LogicalSize::new(WINDOW_INITIAL_WIDTH, WINDOW_INITIAL_HEIGHT))
         .with_title("flap");
     let cntxt_b = glium::glutin::ContextBuilder::new()
-	.with_depth_buffer(24);
+	.with_depth_buffer(24)
+	.with_pixel_format(8, 8)
+	.with_multisampling(8);
+    // .with_srgb(false);
     let disp = glium::Display::new(win_b, cntxt_b, &eve_lp)?;
 
     // compile and link shaders
     let shdr = glium::program::Program::from_source(
 	&disp,
-	&std::fs::read_to_string("./src/vert.glsl")?,
-	&std::fs::read_to_string("./src/frag.glsl")?,
+	&std::fs::read_to_string("./res/vert.glsl")?,
+	&std::fs::read_to_string("./res/frag.glsl")?,
 	None
+    )?;
+
+    // Load texture atlas
+    let decoder = png::Decoder::new(std::fs::File::open("./res/atlas.png")?);
+    let mut reader = decoder.read_info()?;
+    let mut texture_atlas = vec![0; reader.output_buffer_size()];
+    let image_info = reader.next_frame(&mut texture_atlas)?;
+    let texture_atlas = glium::texture::srgb_texture2d::SrgbTexture2d::new(
+	&disp,
+	glium::texture::RawImage2d {
+	    data: std::borrow::Cow::from(&texture_atlas),
+	    width: image_info.width,
+	    height: image_info.height,
+	    format: glium::texture::ClientFormat::U8U8U8U8,
+	}
     )?;
 
     let mut game_state = GameState::new();
@@ -195,7 +287,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 			virtual_keycode: Some(keycode),
 			..
 		    },
-		    is_synthetic: false, // true indicates key was already pressed when window gained focus
 		    ..
 		},
 		..
@@ -289,12 +380,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	// get all our vertices together
 	let mut vertices = Vec::new();
 	vertices.extend_from_slice(
-	    &square_from_dims(game_state.birdy.size, game_state.birdy.size, BIRDY_DEPTH, game_state.birdy.position, BIRDY_COLOR)
+	    &square_from_dims(game_state.birdy.size,
+			      game_state.birdy.size,
+			      BIRDY_DEPTH,
+			      game_state.birdy.position,
+			      ((8.0 / 64.0, 0.0 / 64.0), (16.0 / 64.0, 8.0 / 64.0)))
 	);
 	for rock in game_state.rocks.iter() { // rocks, duh
-	    vertices.extend_from_slice(
-		&square_from_dims(rock.size, rock.size, ROCK_DEPTH, rock.position, ROCK_COLOR)
-	    );
+	    if rock.velocity.1.is_sign_positive() {
+		vertices.extend_from_slice(
+		    &square_from_dims(rock.size, rock.size, ROCK_DEPTH, rock.position, ((16.0 / 64.0, 32.0 / 64.0), (32.0 / 64.0, 48.0 / 64.0)))
+		);
+	    }
+	    else {
+		vertices.extend_from_slice(
+		    &square_from_dims(rock.size, rock.size, ROCK_DEPTH, rock.position, ((0.0 / 64.0, 32.0 / 64.0), (16.0 / 64.0, 48.0 / 64.0)))
+		);
+	    }
 	}
 	vertices.extend_from_slice(&PLAYFIELD_MODEL); // playfield
 
@@ -302,7 +404,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let mut f_buff = disp.draw(); // next framebuffer
 	f_buff.clear( // clear the framebuffer
 	    None, // rect
-	    Some((0.0, 0.0, 0.0, 1.0)), // color
+	    Some((0.0, 0.0, 0.0, 0.0)), // color
 	    true, // color_srgb
 	    Some(f32::MAX), // depth
 	    None // stencil
@@ -318,6 +420,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	    &shdr, // shader program
 	    &glium::uniform! {
 		window_aspect_ratio: window_aspect_ratio,
+		texture_atlas: texture_atlas.sampled()
+		    .magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest),
 	    },
 	    &glium::DrawParameters { // draw parameters
 		depth: glium::Depth {
