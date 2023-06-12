@@ -3,31 +3,31 @@ use glium::Surface;
 const BIRDY_ACCEL_GRAV: f32 = -0.9;
 const BIRDY_ACCEL_JUMP: f32 = 0.8;
 const BIRDY_ACCEL_MOVE: f32 = 0.6;
-const BIRDY_DECCEL_MOVE: f32 = -0.4; // decceleration applied when player isn't holding a direction key
+const BIRDY_DECCEL_MOVE: f32 = -0.6; // decceleration applied when player isn't holding a direction key
 const BIRDY_JUMP_COOLDOWN: std::time::Duration = std::time::Duration::from_millis(250);
 const BIRDY_TERMINAL_VELOCITY: f32 = -1.0;
 const BIRDY_DEPTH: f32 = 0.0;
 const BIRDY_SIZE: f32 = 0.1;
 
-const ROCK_COOLDOWN: std::time::Duration = std::time::Duration::from_millis(750);
+const ROCK_COOLDOWN: std::time::Duration = std::time::Duration::from_millis(500);
 const ROCK_DESPAWN_DIST: f32 = 2.0;
-const ROCK_MIN_VELOCITY: f32 = 0.5;
-const ROCK_MAX_VELOCITY: f32 = 1.0;
+const ROCK_MIN_VELOCITY: f32 = 0.25;
+const ROCK_MAX_VELOCITY: f32 = 0.5;
 const ROCK_SPAWN_DIST: f32 = 1.5;
 const ROCK_DEPTH: f32 = 0.1;
 const ROCK_MIN_SIZE: f32 = 0.05;
-const ROCK_MAX_SIZE: f32 = 0.2;
+const ROCK_MAX_SIZE: f32 = 0.15;
 
-const COIN_COOLDOWN: std::time::Duration = std::time::Duration::from_millis(4000);
+const COIN_COOLDOWN: std::time::Duration = std::time::Duration::from_millis(3000);
 const COIN_DESPAWN_DIST: f32 = 2.0;
-const COIN_MIN_VELOCITY: f32 = 0.5;
+const COIN_MIN_VELOCITY: f32 = 0.75;
 const COIN_MAX_VELOCITY: f32 = 1.0;
 const COIN_SPAWN_DIST: f32 = 1.5;
-const COIN_DEPTH: f32 = 0.1;
+const COIN_DEPTH: f32 = 0.2;
 const COIN_MIN_SIZE: f32 = 0.05;
-const COIN_MAX_SIZE: f32 = 0.2;
+const COIN_MAX_SIZE: f32 = 0.1;
 
-const PLAYFIELD_BOUNCE_COEFFICIENT: f32 = -0.5; // portion of player's velocity to reflect when they collide with the bottom of the playfield.
+const PLAYFIELD_BOUNCE_COEFFICIENT: f32 = -0.75; // portion of player's velocity to reflect when they collide with the bottom of the playfield.
 const PLAYFIELD_MODEL: Quad = square_from_edge_positions(
     -1.0,
     1.0,
@@ -143,7 +143,6 @@ struct GameState {
     last_rock_spawn_time: Option<std::time::Instant>,
     rock_fall_direction: f32,
     last_coin_spawn_time: Option<std::time::Instant>,
-    coin_fall_direction: f32,
     birdy: PhysObj,
     rocks: Vec<PhysObj>,
     coins: Vec<PhysObj>,
@@ -156,7 +155,6 @@ impl GameState {
 	    last_rock_spawn_time: None,
 	    rock_fall_direction: 1.0,
 	    last_coin_spawn_time: None,
-	    coin_fall_direction: -1.0,
 	    birdy: PhysObj {
 		position: (0.0, 0.0),
 		velocity: (0.0, 0.0),
@@ -386,14 +384,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	    if rand::random() {
 		x *= -1.0;
 	    }
+	    let coin_fall_direction = if rand::random() {
+		1.0
+	    }
+	    else {
+		-1.0
+	    };
 	    game_state.coins.push(
 		PhysObj {
-		    position: (x, COIN_SPAWN_DIST * game_state.coin_fall_direction),
-		    velocity: (0.0, game_state.coin_fall_direction * -1.0 * rand_range(COIN_MIN_VELOCITY, COIN_MAX_VELOCITY)),
+		    position: (x, COIN_SPAWN_DIST * coin_fall_direction),
+		    velocity: (0.0, coin_fall_direction * -1.0 * rand_range(COIN_MIN_VELOCITY, COIN_MAX_VELOCITY)),
 		    size: size,
 		}
 	    );
-	    game_state.coin_fall_direction *= -1.0;
 	}
 	for coin in game_state.coins.iter_mut() {
 	    coin.position_delta(time_delta);
