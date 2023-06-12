@@ -18,6 +18,15 @@ const ROCK_DEPTH: f32 = 0.1;
 const ROCK_MIN_SIZE: f32 = 0.05;
 const ROCK_MAX_SIZE: f32 = 0.2;
 
+const COIN_COOLDOWN: std::time::Duration = std::time::Duration::from_millis(4000);
+const COIN_DESPAWN_DIST: f32 = 2.0;
+const COIN_MIN_VELOCITY: f32 = 0.5;
+const COIN_MAX_VELOCITY: f32 = 1.0;
+const COIN_SPAWN_DIST: f32 = 1.5;
+const COIN_DEPTH: f32 = 0.1;
+const COIN_MIN_SIZE: f32 = 0.05;
+const COIN_MAX_SIZE: f32 = 0.2;
+
 const PLAYFIELD_BOUNCE_COEFFICIENT: f32 = -0.5; // portion of player's velocity to reflect when they collide with the bottom of the playfield.
 const PLAYFIELD_MODEL: Quad = square_from_edge_positions(
     -1.0,
@@ -133,9 +142,12 @@ struct GameState {
     last_jump_time: Option<std::time::Instant>,
     last_rock_spawn_time: Option<std::time::Instant>,
     rock_fall_direction: f32,
+    last_coin_spawn_time: Option<std::time::Instant>,
+    coin_fall_direction: f32,
     birdy: PhysObj,
     rocks: Vec<PhysObj>,
-    dead: bool,
+    coins: Vec<PhysObj>,
+    score: u32,
 }
 impl GameState {
     fn new () -> GameState {
@@ -143,13 +155,16 @@ impl GameState {
 	    last_jump_time: None,
 	    last_rock_spawn_time: None,
 	    rock_fall_direction: 1.0,
+	    last_coin_spawn_time: None,
+	    coin_fall_direction: -1.0,
 	    birdy: PhysObj {
 		position: (0.0, 0.0),
 		velocity: (0.0, 0.0),
 		size: BIRDY_SIZE,
 	    },
 	    rocks: Vec::new(),
-	    dead: false,
+	    coins: Vec::new(),
+	    score: 0,
 	}
     }
 }
@@ -260,11 +275,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	next_frame_time += std::time::Duration::from_nanos(16_666_667); // next frame should render 1/60 sec later
 	*ctrl_flow = glium::glutin::event_loop::ControlFlow::WaitUntil(next_frame_time);
 
-	// upkeep
-	if game_state.dead {
-	    game_state = GameState::new();
-	}
-
 	// handle events
 	match eve {
 	    glium::glutin::event::Event::WindowEvent {
@@ -365,16 +375,71 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	    }
 	}
 
+	// coin stuff
+	if match game_state.last_coin_spawn_time {
+	    None => std::time::Duration::MAX,
+	    Some(time) => now.duration_since(time)
+	} > COIN_COOLDOWN {
+	    game_state.last_coin_spawn_time = Some(now);
+	    let size = rand_range(COIN_MIN_SIZE, COIN_MAX_SIZE);
+	    let mut x = rand::random::<f32>() * (1.0 - size);
+	    if rand::random() {
+		x *= -1.0;
+	    }
+	    game_state.coins.push(
+		PhysObj {
+		    position: (x, COIN_SPAWN_DIST * game_state.coin_fall_direction),
+		    velocity: (0.0, game_state.coin_fall_direction * -1.0 * rand_range(COIN_MIN_VELOCITY, COIN_MAX_VELOCITY)),
+		    size: size,
+		}
+	    );
+	    game_state.coin_fall_direction *= -1.0;
+	}
+	for coin in game_state.coins.iter_mut() {
+	    coin.position_delta(time_delta);
+	}
+	let mut i = 0;
+	while i < game_state.coins.len() {
+	    if f32::abs(game_state.coins[i].position.1) > COIN_DESPAWN_DIST {
+		game_state.coins.remove(i);
+	    }
+	    else {
+		i += 1;
+	    }
+	}
+
 	// birdy-rock collision
-	for rock in game_state.rocks.iter() {
+	let mut i = 0;
+	while i < game_state.rocks.len() {
+	    let rock = game_state.rocks[i];
 	    if f32::abs(rock.position.1) <= 1.0 + rock.size &&
 		rock.position.0 - rock.size < game_state.birdy.position.0 + game_state.birdy.size &&
 		rock.position.0 + rock.size > game_state.birdy.position.0 - game_state.birdy.size &&
 		rock.position.1 - rock.size < game_state.birdy.position.1 + game_state.birdy.size &&
 		rock.position.1 + rock.size > game_state.birdy.position.1 - game_state.birdy.size {
-		    game_state.dead = true;
-		    break;
+		    game_state = GameState::new();
+		    return;
 		}
+	    else {
+		i += 1;
+	    }
+	}
+
+	// birdy-coin collision
+	let mut i = 0;
+	while i < game_state.coins.len() {
+	    let coin = game_state.coins[i];
+	    if f32::abs(coin.position.1) <= 1.0 + coin.size &&
+		coin.position.0 - coin.size < game_state.birdy.position.0 + game_state.birdy.size &&
+		coin.position.0 + coin.size > game_state.birdy.position.0 - game_state.birdy.size &&
+		coin.position.1 - coin.size < game_state.birdy.position.1 + game_state.birdy.size &&
+		coin.position.1 + coin.size > game_state.birdy.position.1 - game_state.birdy.size {
+		    game_state.score += 1;
+		    game_state.coins.remove(i);
+		}
+	    else {
+		i += 1;
+	    }
 	}
 
 	// get all our vertices together
@@ -397,6 +462,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 		    &square_from_dims(rock.size, rock.size, ROCK_DEPTH, rock.position, ((0.0 / 64.0, 32.0 / 64.0), (16.0 / 64.0, 48.0 / 64.0)))
 		);
 	    }
+	}
+	for coin in game_state.coins.iter() { // coins, duh
+	    vertices.extend_from_slice(
+		    &square_from_dims(coin.size, coin.size, COIN_DEPTH, coin.position, ((32.0 / 64.0, 32.0 / 64.0), (48.0 / 64.0, 48.0 / 64.0)))
+		);
 	}
 	vertices.extend_from_slice(&PLAYFIELD_MODEL); // playfield
 
@@ -442,8 +512,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 	    for frame_time in frame_times.iter() {
 		total_frame_time += *frame_time;
 	    }
-	    println!("total: {:?}", total_frame_time);
-	    println!("avg: {:?}", total_frame_time / 60);
+	    println!("total frametime: {:?}/1000ms", total_frame_time);
+	    println!("avg frametime: {:?}/16.7ms", total_frame_time / 60);
+	    println!("score: {}", game_state.score);
 	    println!("");
 	    frame_times = Vec::new();
 	}
