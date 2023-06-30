@@ -8,7 +8,7 @@ pub mod rock;
 
 pub const PLAYFIELD_BOUNCE_COEFFICIENT: f32 = -0.75; // portion of player's velocity to reflect when they collide with the bottom of the playfield.
 
-const DESPAWN_DISTANCE: f32 = 2.0;
+const DESPAWN_DISTANCE: f32 = 2.5;
 
 #[derive(Copy, Clone)]
 pub struct PhysObj {
@@ -16,7 +16,8 @@ pub struct PhysObj {
     pub y: f32,
     pub x_velocity: f32,
     pub y_velocity: f32,
-    pub size: f32,
+    pub width: f32,
+    pub height: f32,
 }
 impl PhysObj {
     fn position_delta(&mut self, time_delta: f32) {
@@ -41,10 +42,10 @@ fn despawn_objs(phys_objs: &mut Vec<PhysObj>) {
 }
 
 fn objs_overlap(a: PhysObj, b: PhysObj) -> bool {
-    a.x - a.size < b.x + b.size
-        && a.x + a.size > b.x - b.size
-        && a.y - a.size < b.y + b.size
-        && a.y + a.size > b.y - b.size
+    a.x - a.width < b.x + b.width
+        && a.x + a.width > b.x - b.width
+        && a.y - a.height < b.y + b.height
+        && a.y + a.height > b.y - b.height
 }
 
 fn spawn_obj(
@@ -136,18 +137,18 @@ pub fn tick(game_state: &mut GameState, now: Instant, time_delta: f32) {
     despawn_objs(&mut game_state.coins);
 
     // birdy-playfield edge collision
-    if game_state.birdy.x - game_state.birdy.size < -1.0 {
-        game_state.birdy.x = -1.0 + game_state.birdy.size;
+    if game_state.birdy.x - game_state.birdy.width < -1.0 {
+        game_state.birdy.x = -1.0 + game_state.birdy.width;
     }
-    if game_state.birdy.x + game_state.birdy.size > 1.0 {
-        game_state.birdy.x = 1.0 - game_state.birdy.size;
+    if game_state.birdy.x + game_state.birdy.width > 1.0 {
+        game_state.birdy.x = 1.0 - game_state.birdy.width;
     }
-    if game_state.birdy.y - game_state.birdy.size < -1.0 {
-        game_state.birdy.y = -1.0 + game_state.birdy.size;
+    if game_state.birdy.y - game_state.birdy.height < -1.0 {
+        game_state.birdy.y = -1.0 + game_state.birdy.height;
         game_state.birdy.y_velocity *= PLAYFIELD_BOUNCE_COEFFICIENT; // bounce
     }
-    if game_state.birdy.y + game_state.birdy.size > 1.0 {
-        game_state.birdy.y = 1.0 - game_state.birdy.size;
+    if game_state.birdy.y + game_state.birdy.height > 1.0 {
+        game_state.birdy.y = 1.0 - game_state.birdy.height;
     }
 
     // birdy-rock collision

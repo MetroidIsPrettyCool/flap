@@ -1,5 +1,8 @@
 use glium::Surface;
 
+#[cfg(test)]
+mod tests;
+
 const BIRDY_DEPTH: f32 = 0.0;
 const ROCK_DEPTH: f32 = 0.1;
 const COIN_DEPTH: f32 = 0.2;
@@ -13,9 +16,6 @@ const PLAYFIELD_MODEL: Quad = square_from_edge_positions(
     ((0.0, 0.0), (8.0 / 64.0, 8.0 / 64.0)),
 );
 
-#[cfg(test)]
-mod tests;
-
 #[derive(Copy, Clone, Debug, PartialEq)]
 struct Vert {
     position: (f32, f32, f32),
@@ -27,6 +27,7 @@ type Quad = [Vert; 6];
 const fn quad_from_verts(lt: Vert, rt: Vert, rb: Vert, lb: Vert) -> Quad {
     [rt, lt, lb, rt, lb, rb]
 }
+
 fn square_from_dims(
     width: f32,
     height: f32,
@@ -55,6 +56,7 @@ fn square_from_dims(
         },
     )
 }
+
 const fn square_from_edge_positions(
     left: f32,
     right: f32,
@@ -83,17 +85,18 @@ const fn square_from_edge_positions(
     )
 }
 
-pub fn draw (
+pub fn draw(
     game_state: &super::GameState,
     disp: &glium::Display,
     shdr: &glium::program::Program,
     texture_atlas: &glium::texture::srgb_texture2d::SrgbTexture2d,
-    window_aspect_ratio: f32) {
+    window_aspect_ratio: f32,
+) {
     // get all our vertices together
     let mut vertices = Vec::new();
     vertices.extend_from_slice(&square_from_dims(
-        game_state.birdy.size,
-        game_state.birdy.size,
+        game_state.birdy.width,
+        game_state.birdy.height,
         BIRDY_DEPTH,
         (game_state.birdy.x, game_state.birdy.y),
         ((8.0 / 64.0, 0.0 / 64.0), (16.0 / 64.0, 8.0 / 64.0)),
@@ -102,16 +105,16 @@ pub fn draw (
         // rocks, duh
         if rock.y_velocity.is_sign_positive() {
             vertices.extend_from_slice(&square_from_dims(
-                rock.size,
-                rock.size,
+                rock.width,
+                rock.height,
                 ROCK_DEPTH,
                 (rock.x, rock.y),
                 ((16.0 / 64.0, 32.0 / 64.0), (32.0 / 64.0, 48.0 / 64.0)),
             ));
         } else {
             vertices.extend_from_slice(&square_from_dims(
-                rock.size,
-                rock.size,
+                rock.width,
+                rock.height,
                 ROCK_DEPTH,
                 (rock.x, rock.y),
                 ((0.0 / 64.0, 32.0 / 64.0), (16.0 / 64.0, 48.0 / 64.0)),
@@ -121,8 +124,8 @@ pub fn draw (
     for coin in game_state.coins.iter() {
         // coins, duh
         vertices.extend_from_slice(&square_from_dims(
-            coin.size,
-            coin.size,
+            coin.width,
+            coin.height,
             COIN_DEPTH,
             (coin.x, coin.y),
             ((32.0 / 64.0, 32.0 / 64.0), (48.0 / 64.0, 48.0 / 64.0)),

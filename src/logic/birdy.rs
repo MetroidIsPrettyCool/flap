@@ -11,6 +11,7 @@ pub fn new_birdy() -> super::PhysObj {
         y: 0.0,
         x_velocity: 0.0,
         y_velocity: 0.0,
-        size: 0.05,
+        width: 0.05,
+	height: 0.05,
     }
 }

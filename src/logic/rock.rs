@@ -16,6 +16,7 @@ pub fn new_rock(fall_direction: f32) -> super::PhysObj {
         y: SPAWN_DIST * fall_direction,
         x_velocity: 0.0,
         y_velocity: fall_direction * -1.0 * super::rand_range(MIN_VELOCITY, MAX_VELOCITY),
-        size: size,
+        width: size,
+	height: size,
     }
 }
