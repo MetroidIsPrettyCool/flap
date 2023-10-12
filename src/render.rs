@@ -1,10 +1,9 @@
 use glium::Surface;
 
-use rusttype::{point, Font, Scale};
-use std::io::Write;
-
 #[cfg(test)]
 mod tests;
+
+mod text;
 
 const BIRDY_DEPTH: f32 = 0.1;
 const ROCK_DEPTH: f32 = 0.2;
@@ -178,123 +177,66 @@ pub fn draw(
         )
         .unwrap();
 
-    // TODO: Clean up this boilerplate once it is understood
+    // create and render our text strings
 
-    let textbox_height_scaler = 20.0;
-
-    // Desired font pixel height
-    let height: f32 = f_buff.get_dimensions().1 as f32 / textbox_height_scaler;
-    let pixel_height = height.ceil() as usize;
-
-    // 2x scale in x direction to counter the aspect ratio of monospace characters.
-    let scale = Scale {
-        x: height * 2.0,
-        y: height,
+    // FPS: {avg_fps} {last_framtime}
+    let fps_text = {
+        let mut prefix = text::SuperString::new("FPS: ".to_string(), font, Vec::new(), 1.0 / 15.0);
+        let avg_fps = if avg_fps != 0.0 {
+            format!("{:.1} ", avg_fps)
+        } else {
+            "...".to_string()
+        };
+        let avg_fps = text::SuperString::new(
+            avg_fps,
+            font,
+            vec![text::ColorFmt::new(0, (0.0, 1.0, 0.0, 1.0))],
+            1.0 / 15.0,
+        );
+        let last_frametime = text::SuperString::new(
+            format!("{:?}", last_frametime),
+            font,
+            vec![text::ColorFmt::new(0, (1.0, 1.0, 0.0, 1.0))],
+            1.0 / 15.0,
+        );
+        prefix.cat(avg_fps);
+        prefix.cat(last_frametime);
+        prefix
     };
 
-    // The origin of a line of text is at the baseline (roughly where
-    // non-descending letters sit). We don't want to clip the text, so we shift
-    // it down with an offset when laying it out. v_metrics.ascent is the
-    // distance between the baseline and the highest edge of any glyph in
-    // the font. That's enough to guarantee that there's no clipping.
-    let v_metrics = font.v_metrics(scale);
-    let offset = point(0.0, v_metrics.ascent);
-
-    let text_color = (1.0, 1.0, 1.0);
-
-    // Glyphs to draw for "RustType". Feel free to try other strings.
-    let score_text = format!(
-        "Score: {} FPS: {:.1} {:?}",
-        game_state.score, avg_fps, last_frametime
-    );
-    let glyphs: Vec<_> = font.layout(&score_text, scale, offset).collect();
-
-    // Find the most visually pleasing width to display
-    let width = glyphs
-        .iter()
-        .rev()
-        .map(|g| g.position().x as f32 + g.unpositioned().h_metrics().advance_width)
-        .next()
-        .unwrap_or(0.0)
-        .ceil() as usize;
-
-    let mut pixel_data = vec![0.0; width * pixel_height * 4]; // multiply by 4 because we're using rgba, thus 4 channels
-    for g in glyphs {
-        if let Some(bb) = g.pixel_bounding_box() {
-            g.draw(|x, y, v| {
-                // ensure pixel value is within the range 0.0..=1.0
-                let v = v.clamp(0.0, 1.0);
-                // if v > 1.0 || v < 0.0 {
-                //     eprintln!(
-                //         "Glyph pixel value was out of range! {v} at {x} {y} for {g:#?} in {{glyphs:#?}}, clamped to {value}"
-                //     );
-                // }
-                let color = (text_color.0, text_color.1, text_color.2, v);
-                let x = x as i32 + bb.min.x;
-                let y = y as i32 + bb.min.y;
-
-                // clip our writes to the texture to stay within its bounds
-                if x >= 0 && x < width as i32 && y >= 0 && y < pixel_height as i32 {
-                    let x = x as usize;
-                    let y = y as usize;
-                    let index = (x + y * width) * 4;
-                    // write each color channel
-                    pixel_data[index + 0] = color.0; // R
-                    pixel_data[index + 1] = color.1; // G
-                    pixel_data[index + 2] = color.2; // B
-                    pixel_data[index + 3] = color.3; // A
-                }
-            })
-        }
-    }
-
-    // build texture from raw color data
-    let text_texture = glium::texture::RawImage2d::from_raw_rgba(
-        pixel_data,
-        (width.try_into().unwrap(), pixel_height.try_into().unwrap()),
-    );
-    let text_texture =
-        glium::texture::srgb_texture2d::SrgbTexture2d::new(disp, text_texture).unwrap();
-
-    // simple quad model, should be located on the upper left corner of the screen
-    let text_model = square_from_edge_positions(
-        -1.0,
-        -1.0 + ((2.0 / textbox_height_scaler) * (width as f32 / pixel_height as f32)),
-        1.0,
-        1.0 - (2.0 / textbox_height_scaler),
-        0.0,
-        ((0.0, 0.0), (1.0, 1.0)),
+    // render the FPS info to the framebuffer
+    text::render_text(
+        &mut f_buff,
+        disp,
+        shdr,
+        window_aspect_ratio,
+        fps_text,
+        (-1.0, 1.0),
     );
 
-    // draw the text text... ure
-    f_buff
-        .draw(
-            // draw vertices to framebuffer
-            &glium::VertexBuffer::new(disp, &text_model).unwrap(),
-            &glium::index::NoIndices(
-                // not using indexed rendering
-                glium::index::PrimitiveType::TrianglesList, // polygon type
-            ),
-            shdr, // shader program
-            &glium::uniform! {
-                window_aspect_ratio: window_aspect_ratio,
-                texture_atlas: text_texture.sampled()
-                    .magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest),
-            },
-            &glium::DrawParameters {
-                // draw parameters
-                depth: glium::Depth {
-                    test: glium::draw_parameters::DepthTest::IfLess,
-                    write: true,
-                    ..Default::default()
-                },
-                blend: glium::draw_parameters::Blend::alpha_blending(),
-                ..Default::default()
-            },
-        )
-        .unwrap();
+    // Score: {score}
+    let score_text = {
+        let mut prefix =
+            text::SuperString::new("Score: ".to_string(), font, Vec::new(), 1.0 / 10.0);
+        let score = text::SuperString::new(
+            format!("{}", game_state.score),
+            font,
+            vec![text::ColorFmt::new(0, (0.0, 1.0, 0.0, 1.0))],
+            1.0 / 10.0,
+        );
+        prefix.cat(score);
+        prefix
+    };
 
-    // END BOILERPLATE
+    // render the score infor the framebuffer
+    text::render_text(
+        &mut f_buff,
+        disp,
+        shdr,
+        window_aspect_ratio,
+        score_text,
+        (-1.0, 1.0 - (1.0 / 15.0)),
+    );
 
     f_buff.finish().unwrap(); // swap framebuffers
 }
