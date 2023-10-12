@@ -5,10 +5,10 @@ uniform float window_aspect_ratio;
 in vec3 position;
 in vec2 texture_coordinates;
 out vec2 v_texture_coordinates;
-out vec3 v_position; // untransformed vertex position
+out vec2 v_position; // untransformed vertex position (x & y)
 
 void main () {
-  v_position = position;
+  v_position = position.xy;
   v_texture_coordinates = texture_coordinates;
   gl_Position = vec4(position, 1.0);
   if (window_aspect_ratio > 1) {

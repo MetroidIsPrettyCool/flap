@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 pub mod birdy;
 pub mod coin;
 pub mod rock;
+pub mod pipe;
 
 pub const PLAYFIELD_BOUNCE_COEFFICIENT: f32 = -0.75; // portion of player's velocity to reflect when they collide with the bottom of the playfield.
 

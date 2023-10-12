@@ -8,6 +8,8 @@ use std::time::{Duration, Instant};
 use glium::glutin::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use glium::glutin::event_loop::{ControlFlow, EventLoop};
 
+// use rusttype::{Font};
+
 const WINDOW_INITIAL_WIDTH: u32 = 1024;
 const WINDOW_INITIAL_HEIGHT: u32 = 768;
 
@@ -50,7 +52,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut next_frame_time = Instant::now();
     let mut then = Instant::now();
     let mut window_aspect_ratio = WINDOW_INITIAL_WIDTH as f32 / WINDOW_INITIAL_HEIGHT as f32;
-    let mut frame_times = Vec::new();
 
     // initial setup
     let eve_lp = EventLoop::new();
@@ -60,7 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             WINDOW_INITIAL_HEIGHT,
         ))
         .with_title("flap");
-    let cntxt_b = glium::glutin::ContextBuilder::new().with_depth_buffer(24);
+    let cntxt_b = glium::glutin::ContextBuilder::new().with_double_buffer(Some(true)).with_depth_buffer(24);
     let disp = glium::Display::new(win_b, cntxt_b, &eve_lp)?;
 
     // compile and link shaders
@@ -86,14 +87,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     )?;
 
+    // Load font data from file
+    let font_data: Vec<u8> = std::fs::read("./res/Octoville.otf")?;
+    let font: rusttype::Font<'static> = rusttype::Font::try_from_vec(font_data).unwrap();
+
     let mut game_state = GameState::new();
+
+    let mut avg_fps = 0.0;
+    let mut last_frametime = std::time::Duration::ZERO;
+
+    let mut last_frametime_avg = std::time::Instant::now();
+    let mut frame_counter = 0;
 
     // main loop
     eve_lp.run(move |eve, _, ctrl_flow| {
         // time-wimey stuff
         let now = Instant::now();
         let time_delta = now.duration_since(then).as_secs_f32();
-        next_frame_time += Duration::from_nanos(16_666_667); // next frame should render 1/60 sec later
+        next_frame_time += Duration::from_nanos(16_666_667); // next frame should render at most 1/60 sec later
         *ctrl_flow = ControlFlow::WaitUntil(next_frame_time);
 
         // upkeep
@@ -142,22 +153,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &disp,
             &shdr,
             &texture_atlas,
+            &font,
             window_aspect_ratio,
+            last_frametime,
+            avg_fps,
         );
 
         // more timey-wimey
-        then = now;
-        frame_times.push(now.elapsed());
-        if frame_times.len() == 60 {
-            let mut total_frame_time = Duration::ZERO;
-            for frame_time in frame_times.iter() {
-                total_frame_time += *frame_time;
-            }
-            println!("total frametime: {:?}/1000ms", total_frame_time);
-            println!("avg frametime: {:?}/16.7ms", total_frame_time / 60);
-            println!("score: {}", game_state.score);
-            println!("");
-            frame_times = Vec::new();
+	last_frametime = now.elapsed();
+        frame_counter += 1;
+        if last_frametime_avg.elapsed() >= std::time::Duration::from_secs(1) {
+	    avg_fps = frame_counter as f32 / last_frametime_avg.elapsed().as_secs_f32();
+            frame_counter = 0;
+	    last_frametime_avg = std::time::Instant::now();
         }
+	then = now;
     });
 }
