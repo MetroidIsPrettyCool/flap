@@ -97,6 +97,12 @@ pub fn render_text_to_texture(
     let mut next_color = colors.next();
 
     for (index, g) in glyphs.into_iter().enumerate() {
+	if let Some(color_fmt) = next_color {
+            if color_fmt.glyph_index == index {
+                current_color = color_fmt.color;
+                next_color = colors.next();
+            }
+        }
         if let Some(bb) = g.pixel_bounding_box() {
             g.draw(|x, y, v| {
                 // ensure pixel value is within the range 0.0..=1.0
@@ -104,13 +110,6 @@ pub fn render_text_to_texture(
 
                 let x = x as i32 + bb.min.x;
                 let y = y as i32 + bb.min.y;
-
-                if let Some(color_fmt) = next_color {
-                    if color_fmt.glyph_index == index {
-                        current_color = color_fmt.color;
-                        next_color = colors.next();
-                    }
-                }
 
                 // clip our writes to the texture to stay within its bounds
                 if x >= 0 && x < width as i32 && y >= 0 && y < pixel_height as i32 {

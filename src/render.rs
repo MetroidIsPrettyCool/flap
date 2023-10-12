@@ -185,7 +185,7 @@ pub fn draw(
         let avg_fps = if avg_fps != 0.0 {
             format!("{:.1} ", avg_fps)
         } else {
-            "...".to_string()
+            "... ".to_string()
         };
         let avg_fps = text::SuperString::new(
             avg_fps,
@@ -215,20 +215,26 @@ pub fn draw(
     );
 
     // Score: {score}
-    let score_text = {
-        let mut prefix =
-            text::SuperString::new("Score: ".to_string(), font, Vec::new(), 1.0 / 10.0);
-        let score = text::SuperString::new(
-            format!("{}", game_state.score),
-            font,
-            vec![text::ColorFmt::new(0, (0.0, 1.0, 0.0, 1.0))],
-            1.0 / 10.0,
-        );
-        prefix.cat(score);
-        prefix
-    };
+    // let score_text = {
+    //     let mut prefix =
+    //         text::SuperString::new("Score: ".to_string(), font, Vec::new(), 1.0 / 10.0);
+    //     let score = text::SuperString::new(
+    //         format!("{}", game_state.score),
+    //         font,
+    //         vec![text::ColorFmt::new(0, (0.0, 1.0, 0.0, 1.0))],
+    //         1.0 / 10.0,
+    //     );
+    //     prefix.cat(score);
+    //     prefix
+    // };
+    let score_text = text::SuperString::new(
+        format!("Score: {}", game_state.score),
+        font,
+        vec![text::ColorFmt::new(6, (0.0, 1.0, 0.0, 1.0))],
+        1.0 / 10.0,
+    );
 
-    // render the score infor the framebuffer
+    // render the score info to the framebuffer
     text::render_text(
         &mut f_buff,
         disp,
